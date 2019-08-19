@@ -1,0 +1,73 @@
+from selenium import webdriver
+import time
+import openpyxl
+
+# 입력값에 따라 주소가 바뀌지 않는 동적페이지이므로 드라이버를 두개 열어놓고 작업
+driver = webdriver.Chrome("./chromedriver")
+driver2 = webdriver.Chrome("./chromedriver")
+
+# csv 리스트로 기업 리스트 불러오기 (기업명 리스트는 세로로 맨 첫열에 한줄 입력)
+import csv
+matrix = []
+f = open('list123456.csv', 'r')
+csvReader = csv.reader(f)
+
+for row in csvReader:
+    matrix.append(row)
+
+print(matrix)
+f.close()
+
+# 저장할 엑셀파일 생성하기
+wb=openpyxl.Workbook()
+sheet=wb.active
+# 첫줄입력
+sheet.append(["no","검색어", "기업명", "인증명", "인증번호", "시작일", "종료일", "링크"])
+
+list = matrix
+
+for li in list:
+    driver.get("https://www.icin.or.kr/STAT/STAT_02_011.aspx")
+    driver.find_element_by_css_selector("input#txtcpn_name").send_keys(li)  #검색창에 리스트에 나와있는 기업 하나씩 입력
+    driver.find_element_by_css_selector("input#btnSearch").click()  #검색버튼 클릭
+ 
+    for n in range(1, 30):   #range(1,30): 검색결과 페이지가 여러개인경우 30까지 불러오기
+        time.sleep(1)  # 기다리기
+        firms = driver.find_elements_by_css_selector("#repeaterListTbl > tbody > tr")
+        for firm in firms:
+            num = firm.find_element_by_css_selector("td > span").text
+            name = firm.find_element_by_css_selector("td > a").text
+            cert = firm.find_element_by_css_selector("tr td:nth-of-type(4)").text
+            id = firm.find_element_by_css_selector("tr td:nth-of-type(5)").text
+            linkk = firm.find_element_by_css_selector("td a").get_attribute('href')
+
+            print(num, li[0], name, cert, id)
+
+            driver2.get(linkk)   #새창에는 각 인증의 링크를 띄움
+            
+            fir_date = driver2.find_element_by_css_selector("span#lblcert_first_dat").text
+            exp_date = driver2.find_element_by_css_selector("span#lblcert_exp_dat").text
+            print(cert, fir_date, exp_date)
+            
+
+            sheet.append([num, li[0], name, cert, id, fir_date, exp_date, linkk])
+            wb.save("icintest.xls")
+
+        page_bar = driver.find_elements_by_css_selector("#ucOrg1_phList > *")
+        print(len(page_bar))
+        
+        try:
+            if n % 10 != 0:  #만약 range가 10의 배수가 아닌데
+                # 만약에 다음 페이지가 img태그인 경우에 반복문을 종료 (다음페이지가 있다면 a태그)
+                if page_bar[n%10+2].tag_name == 'img':
+                    print("개별기업완료")
+                    break
+                page_bar[n % 10 + 2].click() #다음페이지가 img태그가 아니라면 n+2번째 버튼 클릭
+            else:
+                    page_bar[12].click()   #range가 10의 배수라면 13번째 버튼(>화살표) 클릭
+        except:
+            break  #아무것도 없으면 종료하기
+
+print("수집완료!")
+driver.close()
+driver2.close()
